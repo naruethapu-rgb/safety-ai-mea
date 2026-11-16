@@ -517,14 +517,14 @@ with tab_analyzer:
                             if not st.session_state.openai_api_key:
                                 st.error("❌ กรุณาใส่ OpenAI API Key ในแถบซ้ายมือก่อนใช้งาน AI Vision")
                             else:
-                                with st.spinner(f"👁️ AI Vision กำลังอ่านภาพสแกนและลายมือภาษาไทยจาก {uploaded_file.name}..."):
+                                with st.spinner(f"👁️ AI Vision กำลังอ่านข้อความจากทุกหน้า (ระบบข้ามภาพแผลสดอัตโนมัติ)..."):
                                     try:
                                         v_model = model_choice if model_choice in ["gpt-4o", "gpt-4o-mini"] else "gpt-4o-mini"
                                         extracted_vision, v_cost = extract_text_with_vision(
                                             temp_path,
                                             api_key=st.session_state.openai_api_key,
                                             model_name=v_model,
-                                            max_pages=5
+                                            max_pages=6
                                         )
                                         st.session_state["uploaded_pdf_text"] = extracted_vision
                                         st.session_state["last_uploaded_file"] = uploaded_file.name
