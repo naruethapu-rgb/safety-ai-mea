@@ -511,61 +511,36 @@ with tab_analyzer:
                         st.session_state["last_uploaded_file"] = uploaded_file.name
                 else:
                     st.warning(f"⚠️ ไฟล์ `{uploaded_file.name}` เป็น **ภาพสแกนจากเอกสารกระดาษ (Scanned PDF)** ซึ่งยังไม่มีตัวหนังสือดิจิทัลฝังอยู่ในไฟล์")
-                    col_ocr1, col_ocr2 = st.columns([3, 2])
-                    with col_ocr1:
-                        if st.button("👁️ อ่านข้อความและลายมือด้วย AI Vision (GPT)", type="primary", use_container_width=True, help="ให้ AI Vision ช่วยอ่านภาพสแกนและลายมือภาษาไทย (ค่าบริการ ~0.15-0.30 บาท/เคส)"):
-                            if not st.session_state.openai_api_key:
-                                st.error("❌ กรุณาใส่ OpenAI API Key ในแถบซ้ายมือก่อนใช้งาน AI Vision")
-                            else:
-                                with st.spinner(f"👁️ AI Vision กำลังอ่านข้อความจากทุกหน้า (ระบบข้ามภาพแผลสดอัตโนมัติ)..."):
-                                    try:
-                                        v_model = model_choice if model_choice in ["gpt-4o", "gpt-4o-mini"] else "gpt-4o-mini"
-                                        extracted_vision, v_cost = extract_text_with_vision(
-                                            temp_path,
-                                            api_key=st.session_state.openai_api_key,
-                                            model_name=v_model,
-                                            max_pages=6
-                                        )
-                                        st.session_state["uploaded_pdf_text"] = extracted_vision
-                                        st.session_state["last_uploaded_file"] = uploaded_file.name
-                                        st.success(f"✅ AI Vision ถอดข้อความสำเร็จ! (ค่าบริการเคสนี้: ~{v_cost['cost_thb']:.2f} บาท | {v_cost['total_tokens']:,} tokens)")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"เกิดข้อผิดพลาดในการเรียก AI Vision: {e}")
+                    
+                    st.markdown("""
+                    <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
+                        <p style="margin: 0; font-size: 0.95rem; color: #1e293b;">
+                            <b>📌 ทางเลือกในการวิเคราะห์สำหรับเอกสารภาพสแกน:</b><br>
+                            1. <b>ใช้ AI Vision สแกนอ่านทุกหน้า:</b> กดปุ่มด้านล่างเพื่อให้ AI อ่านข้อความและภาพสรุปพฤติการณ์ออกมาอัตโนมัติ (มีค่าบริการ OpenAI ~0.20 - 0.50 บาท/เคส)<br>
+                            2. <b>พิมพ์หรือวางข้อความสรุปเอง:</b> พิมพ์รายละเอียดพฤติการณ์ลงในช่องข้อความด้านล่างโดยตรง (<b>ฟรี 100%</b> ไม่เสียค่าใช้จ่าย)
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                    with col_ocr2:
-                        col_btn_a, col_btn_b = st.columns(2)
-                        with col_btn_a:
-                            if st.button("📋 ดึงข้อความเคสนายอภิวัฒน์ (ฟรี 100%)", use_container_width=True, help="คลิกเพื่อดึงข้อความเคสนายอภิวัฒน์ (ลื่นล้ม-คอนเหล็กทับนิ้ว) โดยไม่ต้องใช้ API ฟรี 100%"):
-                                st.session_state["uploaded_pdf_text"] = (
-                                    "รายงานการประสบอันตรายของพนักงาน (แบบ อบ.ปอ. 1-2)\n"
-                                    "ผู้ประสบอันตราย: นายอภิวัฒน์ เรืองอยู่ เลขประจำตัว 260268 อายุ 30 ปี ตำแหน่ง พนักงานสนาม 2 (ท.ช่างสายอากาศ) "
-                                    "สังกัด แผนกก่อสร้างระบบจำหน่าย กองบริการการจำหน่าย การไฟฟ้านครหลวงเขตบางนา (ฟขบ.)\n"
-                                    "วันเวลาและสถานที่เกิดเหตุ: วันอาทิตย์ที่ 10 พฤษภาคม 2569 เวลาประมาณ 08.26 น. ณ ลาน KYT ชั้น 1 อาคารจอดรถ ที่ทำการบางนา\n"
-                                    "พฤติการณ์การเกิดเหตุ: ขณะที่นายอภิวัฒน์ฯ กำลังเตรียมอุปกรณ์ขึ้นรถงาน ขบ.674 เพื่อออกปฏิบัติงานปรับปรุงระบบจำหน่าย "
-                                    "ได้ขนย้ายคอนเหล็กหุ้มฉนวนขนาด 2.5 เมตร ด้วย 2 มือยกพาดบนไหล่ซ้าย เดินจากห้องเก็บของ ก.แก้ไฟฯ ไปยังจุดจอดรถงาน "
-                                    "ระหว่างเดินผ่านลาน KYT ได้เหยียบพื้นผิวขัดมันที่มีน้ำขังอยู่จากฝนสาด ทำให้ลื่นเสียหลักล้มลง คอนเหล็กที่แบกอยู่ตกกระแทกปลายนิ้วมือซ้าย "
-                                    "ส่งผลให้มีแผลเปิด เลือดออก และกระดูกหักที่ปลายนิ้วกลางและนิ้วนางมือซ้าย พนักงานสวมรองเท้าแตะ ไม่ได้สวมรองเท้านิรภัย และไม่ได้ประเมินสภาพทางเดินก่อนยกของหนัก\n"
-                                    "การรักษา: ปฐมพยาบาลห้ามเลือดและนำส่งรักษาตัวที่โรงพยาบาลศิครินทร์ แพทย์วินิจฉัยกระดูกหักแผลเปิด ให้หยุดงาน 10-17 พ.ค. 2569"
-                                )
-                                st.session_state["last_uploaded_file"] = uploaded_file.name
-                                st.session_state["default_form_choice"] = 0
-                                st.rerun()
-
-                        with col_btn_b:
-                            if st.button("📋 ดึงเคสนายฐาปกรณ์ (อบ.ปอ. 3 รถชน)", use_container_width=True):
-                                st.session_state["uploaded_pdf_text"] = (
-                                    "เมื่อวันอังคารที่ 15 กันยายน 2569 เวลาประมาณ 17.30 น. รถกระบะบรรทุก 6 ตัน (CARGO TRUCK 6T) "
-                                    "ของ จย.ฟขญ. เลขข้างรถ ขญ.700 ทะเบียน 52-5733 กรุงเทพมหานคร โดยมี นายฐาปกรณ์ หมอนลี อายุ 44 ปี "
-                                    "พนักงานผู้รับจ้างจาก สหกรณ์บริการพนักงานการไฟฟ้านครหลวง จำกัด (สปฟ.) สังกัด แผนกจัดการยานพาหนะและเครื่องมือ "
-                                    "กองบริการการจำหน่าย การไฟฟ้านครหลวงเขตบางใหญ่ เป็นผู้ขับขี่ ขณะออกปฏิบัติหน้าที่และดำเนินการเปลี่ยนช่องทางเดินรถไปทางด้านขวา "
-                                    "บริเวณสามแยกเลี่ยงเมืองนนทบุรี ถนน 3 ช่องจราจร ได้เกิดการเฉี่ยวชนกับรถคู่กรณี รถยนต์ SUV ยี่ห้อ ISUZU รุ่น MU-X ทะเบียน 2-3248 "
-                                    "ส่งผลให้รถคู่กรณีบริเวณกันชนแก้มซ้าย กันชนหน้า ไฟหน้าซ้าย และกระโปรงหน้า ได้รับความเสียหาย ท้ายรถด้านขวา กฟน. เฉี่ยวชน "
-                                    "ความเร็วขณะเกิดเหตุ 10 กม./ชม. สภาพอากาศฝนตกหนัก บริษัทประกันภัยเทเวศประกันภัยเข้าตรวจสอบและออกใบเคลมเรียบร้อยแล้ว"
-                                )
-                                st.session_state["last_uploaded_file"] = uploaded_file.name
-                                st.session_state["default_form_choice"] = 1
-                                st.rerun()
+                    if st.button("👁️ วิเคราะห์และสรุปข้อเท็จจริงจากเอกสารสแกนด้วย AI Vision (GPT)", type="primary", use_container_width=True, help="AI Vision จะอ่านภาพสแกนทุกหน้าและสรุปพฤติการณ์ วันเวลา ผู้บาดเจ็บ และสาเหตุให้อัตโนมัติ"):
+                        if not st.session_state.openai_api_key:
+                            st.error("❌ กรุณาใส่ OpenAI API Key ในแถบซ้ายมือก่อนใช้งาน AI Vision")
+                        else:
+                            with st.spinner(f"👁️ AI Vision กำลังอ่านและสรุปพฤติการณ์จากภาพสแกนทุกหน้า (พร้อมข้ามภาพแผลสดอัตโนมัติ)..."):
+                                try:
+                                    v_model = model_choice if model_choice in ["gpt-4o", "gpt-4o-mini"] else "gpt-4o-mini"
+                                    extracted_vision, v_cost = extract_text_with_vision(
+                                        temp_path,
+                                        api_key=st.session_state.openai_api_key,
+                                        model_name=v_model,
+                                        max_pages=6
+                                    )
+                                    st.session_state["uploaded_pdf_text"] = extracted_vision
+                                    st.session_state["last_uploaded_file"] = uploaded_file.name
+                                    st.success(f"✅ AI Vision สรุปเนื้อหาจากเอกสารสำเร็จ! (ค่าบริการเคสนี้: ~{v_cost['cost_thb']:.2f} บาท | {v_cost['total_tokens']:,} tokens)")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"เกิดข้อผิดพลาดในการเรียก AI Vision: {e}")
 
                 incident_text = st.text_area(
                     "รายละเอียดพฤติการณ์การเกิดเหตุ (สำหรับส่งไปวิเคราะห์):",
