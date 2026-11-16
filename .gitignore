@@ -1,0 +1,19 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Streamlit local secrets (do not push personal keys)
+.streamlit/secrets.toml
+.env
+
+# Backups and temporary output
+database/backups/
+output/
