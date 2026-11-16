@@ -776,10 +776,11 @@ with tab_analyzer:
                 incident_meta=f"อุบัติภัยราย: {res['title']} (วันเวลาเกิดเหตุ: ตามแบบฟอร์มที่ส่งมา)",
                 incident_text=res["text"],
                 past_comparison=past_comp_txt,
-                causes_text="เกิดจากผู้ปฏิบัติงาน/ผู้ขับขี่ยานพาหนะขาดความระมัดระวังรอบคัน หรือสภาพพื้นที่ปฏิบัติงานไม่ปลอดภัยตามข้อกำหนด",
+                causes_text="",
                 wi_evaluation=wi_eval_txt,
-                prevention_text="ให้พนักงานและหน่วยงานยึดถือปฏิบัติตามคู่มือขั้นตอนการปฏิบัติงาน (WI) อย่างเคร่งครัด ตรวจสอบสภาพแวดล้อมก่อนเริ่มงานทุกครั้ง",
-                analyst_name=analyst_name
+                prevention_text="",
+                analyst_name=analyst_name,
+                analysis_markdown=res.get("analysis_md", "")
             )
 
             st.download_button(

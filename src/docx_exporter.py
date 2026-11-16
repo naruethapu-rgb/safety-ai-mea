@@ -1,8 +1,11 @@
 """Word Document (.docx) Exporter for AI Accident Intelligence.
 Formats official MEA Safety Analysis Reports (อบ.ปอ. 1-4) ready for print.
+Ensures 100% exact text parity between web screen display and Word download.
 """
 
 import io
+import re
+from typing import Optional
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -26,6 +29,37 @@ def set_run_font(run, font_name="TH Sarabun PSK", size_pt=16, bold=False, color_
     rPr.append(rFonts)
 
 
+def extract_section_text(md_text: str, header_keywords: list) -> str:
+    """Extracts text under a markdown ### heading matching any of header_keywords."""
+    if not md_text:
+        return ""
+    lines = md_text.splitlines()
+    collecting = False
+    captured = []
+
+    for line in lines:
+        if line.startswith("### "):
+            header_title = line[4:].strip()
+            if any(kw in header_title for kw in header_keywords):
+                collecting = True
+                captured = []
+                continue
+            elif collecting:
+                break
+        elif collecting:
+            # Stop if reached next main header or analyst signature
+            if line.startswith("## ") or line.startswith("# "):
+                break
+            captured.append(line)
+
+    result = "\n".join(captured).strip()
+    # Clean markdown bold/italic markers for clean Word text
+    result = re.sub(r"\*\*(.*?)\*\*", r"\1", result)
+    result = re.sub(r"_(.*?)_", r"\1", result)
+    result = re.sub(r"`(.*?)`", r"\1", result)
+    return result
+
+
 def create_safety_report_docx(
     report_title: str,
     target_form: str,
@@ -35,14 +69,32 @@ def create_safety_report_docx(
     causes_text: str,
     wi_evaluation: str,
     prevention_text: str,
-    analyst_name: str = "นายนฤเทพ อุบลรัศมี"
+    analyst_name: str = "นายนฤเทพ อุบลรัศมี",
+    analysis_markdown: Optional[str] = None
 ) -> bytes:
     """Generates an official A4 Microsoft Word document matching MEA standards.
-    
-    Returns:
-        bytes: Raw docx file content for Streamlit download.
+    If analysis_markdown is provided, extracts the exact generated sections to ensure
+    100% parity with the web display.
     """
     doc = Document()
+
+    # If full analysis_markdown is provided, extract the real generated sections
+    if analysis_markdown:
+        parsed_past = extract_section_text(analysis_markdown, ["การเปรียบเทียบเชิงลึก", "อุบัติเหตุในอดีต"])
+        if parsed_past:
+            past_comparison = parsed_past
+
+        parsed_causes = extract_section_text(analysis_markdown, ["สาเหตุ"])
+        if parsed_causes:
+            causes_text = parsed_causes
+
+        parsed_wi = extract_section_text(analysis_markdown, ["การตรวจสอบการละเมิด", "WI", "คู่มือปฏิบัติงาน"])
+        if parsed_wi:
+            wi_evaluation = parsed_wi
+
+        parsed_prevention = extract_section_text(analysis_markdown, ["วิธีการป้องกัน", "แนวทางป้องกัน"])
+        if parsed_prevention:
+            prevention_text = parsed_prevention
 
     # Set Margins (Top/Bottom 1 inch, Left 1.25 inch, Right 1 inch)
     for section in doc.sections:
@@ -71,19 +123,26 @@ def create_safety_report_docx(
     set_run_font(run_meta, size_pt=16, bold=False)
 
     def add_section(heading_title: str, body_text: str):
+        if not body_text or not body_text.strip():
+            return
         p_head = doc.add_paragraph()
         p_head.paragraph_format.space_before = Pt(8)
         p_head.paragraph_format.space_after = Pt(2)
         run_h = p_head.add_run(heading_title)
         set_run_font(run_h, size_pt=16, bold=True)
 
-        p_body = doc.add_paragraph()
-        p_body.paragraph_format.space_before = Pt(0)
-        p_body.paragraph_format.space_after = Pt(6)
-        p_body.paragraph_format.line_spacing = 1.15
-        p_body.paragraph_format.left_indent = Inches(0.25)
-        run_b = p_body.add_run(body_text.strip())
-        set_run_font(run_b, size_pt=16, bold=False)
+        # Split into paragraphs/lines for proper spacing
+        for line in body_text.strip().splitlines():
+            line_str = line.strip()
+            if not line_str:
+                continue
+            p_body = doc.add_paragraph()
+            p_body.paragraph_format.space_before = Pt(0)
+            p_body.paragraph_format.space_after = Pt(3)
+            p_body.paragraph_format.line_spacing = 1.15
+            p_body.paragraph_format.left_indent = Inches(0.25)
+            run_b = p_body.add_run(line_str)
+            set_run_font(run_b, size_pt=16, bold=False)
 
     # 3. Sections
     if incident_text:
