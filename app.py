@@ -33,6 +33,7 @@ from src.analyzer import (
 )
 from src.analytics import get_incident_analytics_data
 from src.docx_exporter import create_safety_report_docx
+from src.ocr_vision import extract_text_with_vision
 
 # Page configuration
 st.set_page_config(
@@ -475,18 +476,42 @@ with tab_analyzer:
                         st.session_state["uploaded_pdf_text"] = extracted_pages_text
                         st.session_state["last_uploaded_file"] = uploaded_file.name
                 else:
-                    st.warning(f"⚠️ ไฟล์ `{uploaded_file.name}` เป็น **ภาพสแกนจากเอกสารกระดาษ (Scanned PDF)** ซึ่งยังไม่มีตัวหนังสือดิจิทัลฝังอยู่ในไฟล์ กรุณาระบุหรือวางข้อความพฤติการณ์ในช่องด้านล่างเพื่อวิเคราะห์:")
-                    if st.button("📋 ดึงข้อความจากบันทึกข้อความเคสนี้ (Auto-fill เคสนายฐาปกรณ์)"):
-                        st.session_state["uploaded_pdf_text"] = (
-                            "เมื่อวันอังคารที่ 15 กันยายน 2569 เวลาประมาณ 17.30 น. รถกระบะบรรทุก 6 ตัน (CARGO TRUCK 6T) "
-                            "ของ จย.ฟขญ. เลขข้างรถ ขญ.700 ทะเบียน 52-5733 กรุงเทพมหานคร โดยมี นายฐาปกรณ์ หมอนลี อายุ 44 ปี "
-                            "พนักงานผู้รับจ้างจาก สหกรณ์บริการพนักงานการไฟฟ้านครหลวง จำกัด (สปฟ.) สังกัด แผนกจัดการยานพาหนะและเครื่องมือ "
-                            "กองบริการการจำหน่าย การไฟฟ้านครหลวงเขตบางใหญ่ เป็นผู้ขับขี่ ขณะออกปฏิบัติหน้าที่และดำเนินการเปลี่ยนช่องทางเดินรถไปทางด้านขวา "
-                            "บริเวณสามแยกเลี่ยงเมืองนนทบุรี ถนน 3 ช่องจราจร ได้เกิดการเฉี่ยวชนกับรถคู่กรณี รถยนต์ SUV ยี่ห้อ ISUZU รุ่น MU-X ทะเบียน 2-3248 "
-                            "ส่งผลให้รถคู่กรณีบริเวณกันชนแก้มซ้าย กันชนหน้า ไฟหน้าซ้าย และกระโปรงหน้า ได้รับความเสียหาย ท้ายรถด้านขวา กฟน. เฉี่ยวชน "
-                            "ความเร็วขณะเกิดเหตุ 10 กม./ชม. สภาพอากาศฝนตกหนัก บริษัทประกันภัยเทเวศประกันภัยเข้าตรวจสอบและออกใบเคลมเรียบร้อยแล้ว"
-                        )
-                        st.session_state["last_uploaded_file"] = uploaded_file.name
+                    st.warning(f"⚠️ ไฟล์ `{uploaded_file.name}` เป็น **ภาพสแกนจากเอกสารกระดาษ (Scanned PDF)** ซึ่งยังไม่มีตัวหนังสือดิจิทัลฝังอยู่ในไฟล์")
+                    col_ocr1, col_ocr2 = st.columns([3, 2])
+                    with col_ocr1:
+                        if st.button("👁️ อ่านข้อความและลายมือด้วย AI Vision (GPT)", type="primary", use_container_width=True, help="ให้ AI Vision ช่วยอ่านภาพสแกนและลายมือภาษาไทย (ค่าบริการ ~0.15-0.30 บาท/เคส)"):
+                            if not st.session_state.openai_api_key:
+                                st.error("❌ กรุณาใส่ OpenAI API Key ในแถบซ้ายมือก่อนใช้งาน AI Vision")
+                            else:
+                                with st.spinner(f"👁️ AI Vision กำลังอ่านภาพสแกนและลายมือภาษาไทยจาก {uploaded_file.name}..."):
+                                    try:
+                                        v_model = model_choice if model_choice in ["gpt-4o", "gpt-4o-mini"] else "gpt-4o-mini"
+                                        extracted_vision = extract_text_with_vision(
+                                            temp_path,
+                                            api_key=st.session_state.openai_api_key,
+                                            model_name=v_model,
+                                            max_pages=5
+                                        )
+                                        st.session_state["uploaded_pdf_text"] = extracted_vision
+                                        st.session_state["last_uploaded_file"] = uploaded_file.name
+                                        st.success("✅ AI Vision ถอดข้อความจากภาพสแกนสำเร็จ!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"เกิดข้อผิดพลาดในการเรียก AI Vision: {e}")
+
+                    with col_ocr2:
+                        if st.button("📋 ดึงข้อความตัวอย่าง (เคสนายฐาปกรณ์)", use_container_width=True):
+                            st.session_state["uploaded_pdf_text"] = (
+                                "เมื่อวันอังคารที่ 15 กันยายน 2569 เวลาประมาณ 17.30 น. รถกระบะบรรทุก 6 ตัน (CARGO TRUCK 6T) "
+                                "ของ จย.ฟขญ. เลขข้างรถ ขญ.700 ทะเบียน 52-5733 กรุงเทพมหานคร โดยมี นายฐาปกรณ์ หมอนลี อายุ 44 ปี "
+                                "พนักงานผู้รับจ้างจาก สหกรณ์บริการพนักงานการไฟฟ้านครหลวง จำกัด (สปฟ.) สังกัด แผนกจัดการยานพาหนะและเครื่องมือ "
+                                "กองบริการการจำหน่าย การไฟฟ้านครหลวงเขตบางใหญ่ เป็นผู้ขับขี่ ขณะออกปฏิบัติหน้าที่และดำเนินการเปลี่ยนช่องทางเดินรถไปทางด้านขวา "
+                                "บริเวณสามแยกเลี่ยงเมืองนนทบุรี ถนน 3 ช่องจราจร ได้เกิดการเฉี่ยวชนกับรถคู่กรณี รถยนต์ SUV ยี่ห้อ ISUZU รุ่น MU-X ทะเบียน 2-3248 "
+                                "ส่งผลให้รถคู่กรณีบริเวณกันชนแก้มซ้าย กันชนหน้า ไฟหน้าซ้าย และกระโปรงหน้า ได้รับความเสียหาย ท้ายรถด้านขวา กฟน. เฉี่ยวชน "
+                                "ความเร็วขณะเกิดเหตุ 10 กม./ชม. สภาพอากาศฝนตกหนัก บริษัทประกันภัยเทเวศประกันภัยเข้าตรวจสอบและออกใบเคลมเรียบร้อยแล้ว"
+                            )
+                            st.session_state["last_uploaded_file"] = uploaded_file.name
+                            st.rerun()
 
                 incident_text = st.text_area(
                     "รายละเอียดพฤติการณ์การเกิดเหตุ (สำหรับส่งไปวิเคราะห์):",
