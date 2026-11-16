@@ -581,8 +581,21 @@ with tab_analyzer:
             st.warning("⚠️ กรุณาระบุรายละเอียดเหตุการณ์ก่อนเริ่มวิเคราะห์")
         else:
             with st.spinner("🔍 กำลังอ่านไส้ในของเหตุการณ์, ค้นหาเคสแม่แบบที่คล้ายคลึง, และจัดทำแบบฟอร์ม..."):
-                # Step 1: Find similar past incidents (อบ.ปอ. 1-4)
-                similar_cases = find_similar_past_incidents(incident_text, top_n=3, db_path=DB_PATH)
+                # Map form choice to specific document category
+                form_cat_map = {
+                    "อุบัติภัยสำหรับพนักงาน (อบ.ปอ. 1-2)": "OB_PO_1_2",
+                    "อุบัติภัยสำหรับพนักงานขับยานพาหนะ (อบ.ปอ. 3)": "OB_PO_3",
+                    "อุบัติภัยสำหรับประชาชน/บุคคลภายนอก (อบ.ปอ. 4)": "OB_PO_4"
+                }
+                target_cat = form_cat_map.get(form_choice)
+
+                # Step 1: Find similar past incidents (filtered to same form category)
+                similar_cases = find_similar_past_incidents(
+                    incident_text, 
+                    top_n=3, 
+                    db_path=DB_PATH,
+                    target_category=target_cat
+                )
 
                 # Step 2: Match relevant WI safety rules
                 matched_wi = match_relevant_wi(incident_text, top_n=3, db_path=DB_PATH)
@@ -642,7 +655,7 @@ with tab_analyzer:
                     st.markdown(f"""
                     <div class='result-card'>
                         <div>
-                            <span class='score-badge'>ความคล้าย {c['similarity_score']}%</span>
+                            <span class='score-badge'>ดัชนีคำค้นหาตรงกัน {c['similarity_score']}%</span>
                             <span class='category-badge'>{c['category_th']}</span>
                         </div>
                         <h5 style='margin:6px 0; color:#2b6cb0;'>{c['filename']} (หน้า {c['page_number']})</h5>
@@ -715,7 +728,7 @@ with tab_analyzer:
 [เคสในอดีตที่ระบบตรวจพบว่าคล้ายกัน]:
 """
             for i, c in enumerate(res["similar_cases"][:2]):
-                chatgpt_prompt += f"- เคสที่ {i+1}: {c['filename']} (หมวด {c['category_th']}) ความคล้าย {c['similarity_score']}%\n  เนื้อหา: {c['snippet']}\n"
+                chatgpt_prompt += f"- เคสที่ {i+1}: {c['filename']} (หมวด {c['category_th']}) ดัชนีคำตรงกัน {c['similarity_score']}%\n  เนื้อหา: {c['snippet']}\n"
 
             chatgpt_prompt += "\n[คู่มือขั้นตอนการปฏิบัติงาน (WI) ที่เกี่ยวข้อง]:\n"
             for i, w in enumerate(res["matched_wi"][:2]):
@@ -758,7 +771,7 @@ with tab_analyzer:
             past_comp_txt = ""
             if res.get("similar_cases"):
                 c0 = res["similar_cases"][0]
-                past_comp_txt = f"เคสในอดีตที่ตรวจพบว่าพฤติการณ์ใกล้เคียง: {c0['filename']} (ความคล้ายคลึง {c0['similarity_score']}%)\nจุดที่เหมือน: {c0['snippet']}"
+                past_comp_txt = f"เคสในอดีตที่ตรวจพบคำสำคัญใกล้เคียง: {c0['filename']} (ดัชนีคำค้นหาตรงกัน {c0['similarity_score']}%)\nพฤติการณ์เคสเดิม: {c0['snippet']}"
 
             wi_eval_txt = ""
             if res.get("matched_wi"):

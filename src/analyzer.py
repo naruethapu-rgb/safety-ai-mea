@@ -21,6 +21,30 @@ from src.usage_tracker import record_api_usage
 logger = logging.getLogger(__name__)
 
 
+# Comprehensive MEA Safety & Administrative Stopwords
+MEA_ADMIN_STOPWORDS = {
+    "การไฟฟ้านครหลวง", "กฟน", "ฝ่ายความปลอดภัย", "ฝปภ", "อบ", "ปอ", "อบปอ",
+    "พนักงาน", "ตำแหน่ง", "สังกัด", "แผนก", "กอง", "กองบริการการจำหน่าย",
+    "ฝ่าย", "เขต", "ฟข", "วันที่", "เวลา", "เวลาประมาณ", "น", "ณ",
+    "สถานที่", "สถานที่เกิดเหตุ", "เกิดเหตุ", "ประสบ", "อุบัติเหตุ", "อุบัติภัย",
+    "รายงาน", "แบบฟอร์ม", "บันทึกข้อความ", "ที่", "ลงวันที่", "กมป",
+    "เลขประจำตัว", "อายุ", "ปี", "ช่าง", "นาย", "นาง", "นางสาว", "ฯ",
+    "ผลการวิเคราะห์", "หาสาเหตุ", "และ", "วิธีการป้องกัน", "การป้องกัน",
+    "ผู้วิเคราะห์", "ผู้อำนวยการ", "จึง", "เรียน", "เสนอ", "เพื่อ", "โปรด",
+    "ทราบ", "ดำเนินการ", "ต่อไป", "ข้อ", "ตาม", "นั้น", "เป็น", "ให้",
+    "ได้", "ซึ่ง", "ใน", "มี", "ไป", "มา", "กับ", "โดย", "จาก", "แล้ว",
+    "ยัง", "จะ", "นี้", "โน้น", "ความ", "การ", "ของ", "อัน", "ว่า",
+    "ช่วย", "ร่วม", "พร้อม", "เนื่องจาก", "ดังกล่าว", "นั้นๆ", "ทำการ"
+}
+
+
+def clean_tokens_for_matching(text: str) -> str:
+    """Tokenizes Thai text and strips boilerplate administrative words."""
+    tokens = tokenize_for_fts(text).split()
+    cleaned = [t for t in tokens if t not in MEA_ADMIN_STOPWORDS and len(t) > 1]
+    return " ".join(cleaned)
+
+
 def init_analysis_table(db_path: Path = DB_PATH) -> None:
     """Creates the incident_analyses table if it doesn't exist."""
     conn = get_connection(db_path)
@@ -47,7 +71,8 @@ def init_analysis_table(db_path: Path = DB_PATH) -> None:
 def find_similar_past_incidents(
     incident_text: str, 
     top_n: int = 3, 
-    db_path: Path = DB_PATH
+    db_path: Path = DB_PATH,
+    target_category: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """Finds top N most similar historical incidents from OB_PO forms using TF-IDF."""
     if not incident_text.strip():
@@ -56,36 +81,57 @@ def find_similar_past_incidents(
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
-        # Query past incidents from OB_PO categories
-        cursor.execute("""
-            SELECT 
-                dp.id as page_id,
-                dp.file_id,
-                dp.page_number,
-                dp.raw_text,
-                f.filename,
-                f.filepath,
-                f.category,
-                f.imported_at
-            FROM document_pages dp
-            JOIN files f ON dp.file_id = f.id
-            WHERE f.category IN ('OB_PO_1_2', 'OB_PO_3', 'OB_PO_4', 'Accidents_Personnel', 'Accidents_Road')
-              AND f.is_active = 1
-        """)
-        past_records = cursor.fetchall()
+        if target_category:
+            cursor.execute("""
+                SELECT 
+                    dp.id as page_id,
+                    dp.file_id,
+                    dp.page_number,
+                    dp.raw_text,
+                    f.filename,
+                    f.filepath,
+                    f.category,
+                    f.imported_at
+                FROM document_pages dp
+                JOIN files f ON dp.file_id = f.id
+                WHERE f.category = ?
+                  AND f.is_active = 1
+            """, (target_category,))
+            past_records = cursor.fetchall()
+        else:
+            past_records = []
+
+        # Fallback to all categories if category filter returned no records
+        if not past_records:
+            cursor.execute("""
+                SELECT 
+                    dp.id as page_id,
+                    dp.file_id,
+                    dp.page_number,
+                    dp.raw_text,
+                    f.filename,
+                    f.filepath,
+                    f.category,
+                    f.imported_at
+                FROM document_pages dp
+                JOIN files f ON dp.file_id = f.id
+                WHERE f.category IN ('OB_PO_1_2', 'OB_PO_3', 'OB_PO_4', 'Accidents_Personnel', 'Accidents_Road')
+                  AND f.is_active = 1
+            """)
+            past_records = cursor.fetchall()
     finally:
         conn.close()
 
     if not past_records:
         return []
 
-    # Tokenize input and historical records
-    tokenized_new = tokenize_for_fts(incident_text)
+    # Tokenize input and historical records with administrative boilerplate removed
+    tokenized_new = clean_tokens_for_matching(incident_text)
     corpus = [tokenized_new]
     doc_meta = []
 
     for rec in past_records:
-        corpus.append(tokenize_for_fts(rec["raw_text"]))
+        corpus.append(clean_tokens_for_matching(rec["raw_text"]))
         doc_meta.append(rec)
 
     try:
@@ -160,12 +206,12 @@ def match_relevant_wi(
     if not wi_records:
         return []
 
-    tokenized_new = tokenize_for_fts(incident_text)
+    tokenized_new = clean_tokens_for_matching(incident_text)
     corpus = [tokenized_new]
     doc_meta = []
 
     for rec in wi_records:
-        corpus.append(tokenize_for_fts(rec["raw_text"]))
+        corpus.append(clean_tokens_for_matching(rec["raw_text"]))
         doc_meta.append(rec)
 
     try:
@@ -225,8 +271,8 @@ def generate_offline_analysis(
     md.append("### การเปรียบเทียบเชิงลึกกับอุบัติเหตุในอดีต (วิเคราะห์เนื้อหาไส้ใน)")
     if similar_cases:
         top_c = similar_cases[0]
-        md.append(f"- **เคสในอดีตที่ตรวจพบว่าพฤติการณ์ใกล้เคียงที่สุด:** `{top_c['filename']}` (ระดับความคล้ายคลึง: **{top_c['similarity_score']}%**)")
-        md.append(f"- **จุดที่เหมือน/ใกล้เคียงกัน:** ลักษณะพฤติกรรม สภาพพื้นที่ หรือประเภทของยานพาหนะ/อุปกรณ์ มีความสอดคล้องกับเหตุการณ์ก่อนหน้า")
+        md.append(f"- **เคสในอดีตที่ตรวจพบคำสำคัญใกล้เคียงที่สุด:** `{top_c['filename']}` (ดัชนีคำค้นหาตรงกัน: **{top_c['similarity_score']}%**)")
+        md.append(f"- **การเปรียบเทียบไส้ใน:** ตรวจสอบพฤติการณ์จริงและกลไกการบาดเจ็บของทั้งสองเคส หากลักษณะการเกิดเหตุต่างกัน ให้ระบุข้อแตกต่างอย่างชัดเจนตามจริง")
         md.append(f"- **ข้อความจากเคสเดิม:** _{top_c['snippet']}_")
     else:
         md.append("- ไม่พบเคสเก่าในอดีตที่มีพฤติการณ์ตรงกันในระบบ")
@@ -320,9 +366,12 @@ def generate_gpt_analysis(
 (เล่าพฤติการณ์ไส้ในอย่างกระชับ ชัดเจน ระบุประเภทรถ หมายเลขทะเบียน ภารกิจ เส้นทาง ช่องจราจร และความเสียหาย)
 
 ### การเปรียบเทียบเชิงลึกกับอุบัติเหตุในอดีต (วิเคราะห์เนื้อหาไส้ใน)
-- ระบุชื่อเคสในอดีตที่ใกล้เคียงที่สุด พร้อมระดับความคล้ายคลึง
-- เปรียบเทียบไส้ใน: ชี้จุดที่เหมือนกันของลักษณะการเกิดเหตุ (เช่น ท่าทางการเลี้ยว, วงเลี้ยวรถใหญ่, การยกของยาว, สภาพพื้น)
-- สรุปว่าเข้าข่ายอุบัติเหตุซ้ำซากหรือไม่
+- เคสในอดีตที่ตรวจพบคีย์เวิร์ดตรงกันมากที่สุด: (ระบุชื่อไฟล์ พร้อมระบุ 'ดัชนีคำค้นหาตรงกัน: X%')
+- เปรียบเทียบไส้ในตามข้อเท็จจริง (ห้ามแต่งเติมหรือบิดเบือนข้อมูลจากเคสเดิมเด็ดขาด):
+  * วิเคราะห์ 'พฤติการณ์จริง' และ 'สาเหตุการบาดเจ็บ/ความเสียหาย' ของเคสใหม่ เทียบกับเนื้อหาจริงของเคสเก่า
+  * หากไส้ในแตกต่างกันอย่างชัดเจน (เช่น เคสหนึ่งลื่นล้ม/คอนเหล็กทับ แต่อีกเคสเป็นลม/สะดุดสายไฟ/โดนของมีคม) ให้ระบุความแตกต่างอย่างตรงไปตรงมาว่า "แม้จะเป็นเอกสาร อบ.ปอ. ในสังกัด กฟน. เหมือนกัน แต่ไส้ในและกลไกการเกิดเหตุมีความแตกต่างกัน"
+  * หากมีจุดที่คล้ายกันจริง (เช่น สภาพพื้นที่ปฏิบัติงาน หรือการประเมินความปลอดภัย) ให้ระบุตามข้อเท็จจริงเท่านั้น
+- สรุปความเชื่อมโยง: ระบุตามจริงว่า "เข้าข่ายอุบัติเหตุซ้ำซาก" หรือ "เป็นอุบัติเหตุคนละลักษณะ ไม่เข้าข่ายอุบัติเหตุซ้ำซาก"
 
 ### สาเหตุ
 (ระบุสาเหตุรากเหง้าอย่างตรงไปตรงมา เป็นข้อย่อย 1, 2, 3 ตามสไตล์แบบฟอร์ม กฟน.)

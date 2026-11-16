@@ -13,7 +13,11 @@ __pycache__/
 # Streamlit local secrets (do not push personal keys)
 .streamlit/secrets.toml
 .env
+sync_and_push.py
+push_to_github.py
+deploy_core_to_github.py
 
 # Backups and temporary output
 database/backups/
 output/
+.github_token
