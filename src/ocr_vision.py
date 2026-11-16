@@ -6,11 +6,13 @@ by rendering PDF pages to images and sending them to OpenAI Vision API.
 import base64
 import fitz  # PyMuPDF
 from openai import OpenAI
+from src.usage_tracker import record_api_usage
 
 
-def extract_text_with_vision(pdf_path, api_key: str, model_name: str = "gpt-4o-mini", max_pages: int = 4) -> str:
+def extract_text_with_vision(pdf_path, api_key: str, model_name: str = "gpt-4o-mini", max_pages: int = 4):
     """Renders the first `max_pages` of a PDF to images and uses OpenAI Vision
     to extract Thai handwriting and printed text accurately.
+    Returns (extracted_text, cost_dict).
     """
     if not api_key:
         raise ValueError("OpenAI API Key is required for AI Vision.")
@@ -68,4 +70,16 @@ def extract_text_with_vision(pdf_path, api_key: str, model_name: str = "gpt-4o-m
         max_tokens=2500
     )
 
-    return response.choices[0].message.content.strip()
+    extracted_text = response.choices[0].message.content.strip() if response.choices else ""
+    prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+    completion_tokens = response.usage.completion_tokens if response.usage else 0
+
+    cost_info = record_api_usage(
+        feature="AI Vision (สแกนภาพ)",
+        model_name=model_name,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        incident_title=getattr(pdf_path, "name", str(pdf_path))
+    )
+
+    return extracted_text, cost_info

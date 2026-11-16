@@ -34,6 +34,7 @@ from src.analyzer import (
 from src.analytics import get_incident_analytics_data
 from src.docx_exporter import create_safety_report_docx
 from src.ocr_vision import extract_text_with_vision
+from src.usage_tracker import get_usage_summary
 
 # Page configuration
 st.set_page_config(
@@ -199,6 +200,39 @@ with st.sidebar:
     else:
         st.info("🟡 โหมดวิเคราะห์ในเครื่อง (Offline Mode)\n*ประมวลผลฟรี 100% ไม่ส่งข้อมูลออกนอกระบบ*")
         model_choice = "offline"
+
+    # API Usage & Cost Tracker Widget
+    if st.session_state.gpt_enabled:
+        st.markdown("---")
+        st.markdown("### 💳 ข้อมูลการใช้ API & ค่าใช้จ่าย")
+        try:
+            usage = get_usage_summary(DB_PATH)
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                st.metric(
+                    label="📅 ยอดใช้เดือนนี้",
+                    value=f"{usage['monthly_cost_thb']:.2f} ฿",
+                    help="ยอดรวมค่าบริการ OpenAI ประจำเดือนปัจจุบัน คำนวณเป็นเงินบาทไทย"
+                )
+            with col_u2:
+                st.metric(
+                    label="⚡ เรียกใช้",
+                    value=f"{usage['monthly_calls']} ครั้ง",
+                    help=f"โทเค็นสะสมเดือนนี้: {usage['monthly_tokens']:,} tokens"
+                )
+
+            st.caption(f"สะสมตลอดกาล: **{usage['all_time_thb']:.2f} บาท** (~${usage['monthly_cost_usd']:.4f} USD)")
+
+            with st.expander("📜 ดูประวัติการใช้ 5 ครั้งล่าสุด"):
+                if not usage["recent_logs"]:
+                    st.write("ยังไม่มีประวัติการเรียกใช้ API ในระบบ")
+                else:
+                    for log in usage["recent_logs"]:
+                        st.markdown(f"• **{log['time'][:16]}** | `{log['feature']}`\n  {log['tokens']:,} tokens (~{log['cost_thb']:.2f} ฿) — _{log['title'][:25]}_")
+
+            st.markdown("[🔗 เช็คยอดเงินคงเหลือจริงในกระเป๋า OpenAI](https://platform.openai.com/settings/organization/billing/overview)")
+        except Exception as e:
+            st.caption(f"ระบบติดตามค่าบริการ: พร้อมทำงาน")
 
     st.markdown("---")
     st.markdown("### 📁 โครงสร้างเอกสารความปลอดภัย")
@@ -486,7 +520,7 @@ with tab_analyzer:
                                 with st.spinner(f"👁️ AI Vision กำลังอ่านภาพสแกนและลายมือภาษาไทยจาก {uploaded_file.name}..."):
                                     try:
                                         v_model = model_choice if model_choice in ["gpt-4o", "gpt-4o-mini"] else "gpt-4o-mini"
-                                        extracted_vision = extract_text_with_vision(
+                                        extracted_vision, v_cost = extract_text_with_vision(
                                             temp_path,
                                             api_key=st.session_state.openai_api_key,
                                             model_name=v_model,
@@ -494,7 +528,7 @@ with tab_analyzer:
                                         )
                                         st.session_state["uploaded_pdf_text"] = extracted_vision
                                         st.session_state["last_uploaded_file"] = uploaded_file.name
-                                        st.success("✅ AI Vision ถอดข้อความจากภาพสแกนสำเร็จ!")
+                                        st.success(f"✅ AI Vision ถอดข้อความสำเร็จ! (ค่าบริการเคสนี้: ~{v_cost['cost_thb']:.2f} บาท | {v_cost['total_tokens']:,} tokens)")
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"เกิดข้อผิดพลาดในการเรียก AI Vision: {e}")
@@ -560,7 +594,7 @@ with tab_analyzer:
 
                 # Step 3: Generate Analysis (GPT if enabled and key available, else Offline Engine)
                 if st.session_state.gpt_enabled and st.session_state.openai_api_key:
-                    analysis_md, engine_used = generate_gpt_analysis(
+                    analysis_md, engine_used, g_cost = generate_gpt_analysis(
                         incident_text=incident_text,
                         similar_cases=similar_cases,
                         matched_wi=matched_wi,
@@ -578,6 +612,7 @@ with tab_analyzer:
                         analyst_name=analyst_name
                     )
                     engine_used = "Offline Safety Matcher (ระบบออฟไลน์)"
+                    g_cost = None
 
                 # Save record to session state
                 st.session_state.analysis_result = {
@@ -588,6 +623,7 @@ with tab_analyzer:
                     "matched_wi": matched_wi,
                     "analysis_md": analysis_md,
                     "engine_used": engine_used,
+                    "cost_info": g_cost,
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
 
@@ -596,7 +632,8 @@ with tab_analyzer:
         res = st.session_state.analysis_result
 
         st.markdown(f"### 📑 ผลการวิเคราะห์: {res['title']}")
-        st.caption(f"🤖 ประมวลผลโดย: **{res['engine_used']}** | เวลา: {res['timestamp']}")
+        cost_txt = f" | 💵 ค่าบริการเคสนี้: **~{res['cost_info']['cost_thb']:.2f} บาท** ({res['cost_info']['total_tokens']:,} tokens)" if res.get("cost_info") else " | 💵 ค่าบริการ: **ฟรี (ระบบออฟไลน์)**"
+        st.caption(f"🤖 ประมวลผลโดย: **{res['engine_used']}** | เวลา: {res['timestamp']}{cost_txt}")
 
         # Top 2 Columns for Side-by-side Evidence (Similar Cases & Matched WI)
         c_left, c_right = st.columns(2)

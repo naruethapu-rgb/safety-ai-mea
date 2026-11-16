@@ -16,6 +16,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.config import DB_PATH, CATEGORY_MAP
 from src.database import get_connection
 from src.thai_indexer import tokenize_for_fts
+from src.usage_tracker import record_api_usage
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +348,17 @@ def generate_gpt_analysis(
         )
 
         content = response.choices[0].message.content or ""
-        return content, f"OpenAI ({model_name})"
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+
+        cost_info = record_api_usage(
+            feature="AI Analyzer (วิเคราะห์)",
+            model_name=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            incident_title=target_form
+        )
+        return content, f"OpenAI ({model_name})", cost_info
 
     except Exception as e:
         logger.error(f"OpenAI GPT Analysis failed: {e}")
@@ -356,7 +367,7 @@ def generate_gpt_analysis(
             f"ระบบจึงสลับมาใช้ผลวิเคราะห์จาก **Offline Safety Engine** อัตโนมัติ:\n\n"
             + generate_offline_analysis(incident_text, similar_cases, matched_wi, target_form, analyst_name)
         )
-        return fallback_text, "Offline Safety Matcher (Fallback)"
+        return fallback_text, "Offline Safety Matcher (Fallback)", None
 
 
 def save_analysis_record(
