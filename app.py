@@ -581,13 +581,13 @@ with tab_analyzer:
             st.warning("⚠️ กรุณาระบุรายละเอียดเหตุการณ์ก่อนเริ่มวิเคราะห์")
         else:
             with st.spinner("🔍 กำลังอ่านไส้ในของเหตุการณ์, ค้นหาเคสแม่แบบที่คล้ายคลึง, และจัดทำแบบฟอร์ม..."):
-                # Map form choice to specific document category
+                # Map target_form to specific document category
                 form_cat_map = {
                     "อุบัติภัยสำหรับพนักงาน (อบ.ปอ. 1-2)": "OB_PO_1_2",
                     "อุบัติภัยสำหรับพนักงานขับยานพาหนะ (อบ.ปอ. 3)": "OB_PO_3",
                     "อุบัติภัยสำหรับประชาชน/บุคคลภายนอก (อบ.ปอ. 4)": "OB_PO_4"
                 }
-                target_cat = form_cat_map.get(form_choice)
+                target_cat = form_cat_map.get(target_form)
 
                 # Step 1: Find similar past incidents (filtered to same form category)
                 similar_cases = find_similar_past_incidents(
